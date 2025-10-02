@@ -537,11 +537,17 @@ async function updateUI() {
                 if (document.getElementById('claimVNTBtn')) {
                     document.getElementById('claimVNTBtn').disabled = false;
 
-            } catch (error) {
-                console.error("Error updating claim button:", error);
+                    try {
+                        const minVNTWei = await stakingContract.methods.getMinWithdrawInfo().call();
+                        const minVNT = web3.utils.fromWei(minVNTWei.toString(), 'ether');
+                        document.getElementById('claimVNTBtn').innerHTML = 
+                            `Claim VNT Rewards (Min: ${minVNT} VNT)`;
+                    } catch (error) {
+                        console.log("Min withdraw info not available");
+                    }
+                }
             }
-        }
-        
+            
         // 5. रेफरल लिंक अपडेट करें
         if (document.getElementById('referralLink')) {
             document.getElementById('referralLink').value = 
