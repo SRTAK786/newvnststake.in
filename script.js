@@ -12,6 +12,7 @@ const metamaskBtn = document.getElementById('metamaskBtn');
 const walletConnectBtn = document.getElementById('walletConnectBtn');
 const mobileMenuBtn = document.getElementById('mobileMenuBtn');
 const navMenu = document.getElementById('navMenu');
+const claimVNTBtn = document.getElementById('claimVNTBtn');
 
 // Global Variables
 let web3;
@@ -354,25 +355,52 @@ async function stakeTokens() {
 
 // केवल VNT रिवॉर्ड्स क्लेम करने के लिए
 async function claimVNTRewards() {
+    console.log("Claim VNT button clicked");
+    
     if (!isConnected) {
+        console.log("Not connected - showing error");
         showNotification("कृपया पहले वॉलेट कनेक्ट करें", "error");
         return;
     }
     
+    if (!accounts[0]) {
+        console.log("No accounts found");
+        showNotification("वॉलेट कनेक्ट नहीं है", "error");
+        return;
+    }
+    
+    if (!stakingContract) {
+        console.log("Staking contract not initialized");
+        showNotification("Contract initialize नहीं हुआ", "error");
+        return;
+    }
+    
+    console.log("Starting claim process for account:", accounts[0]);
+    
     try {
-        // DIRECT contract call करें - किसी calculation के बिना
         showNotification("VNT रिवॉर्ड्स claim किए जा रहे हैं...", "info");
         
-        const result = await stakingContract.methods.claimVNTRewards().send({ 
-            from: accounts[0],
-            gas: 300000
+        // Gas estimate प्राप्त करें
+        const gasEstimate = await stakingContract.methods.claimVNTRewards().estimateGas({ 
+            from: accounts[0] 
         });
         
+        console.log("Gas estimate:", gasEstimate);
+        
+        // Transaction send करें
+        const result = await stakingContract.methods.claimVNTRewards().send({ 
+            from: accounts[0],
+            gas: Math.floor(gasEstimate * 1.2) // 20% extra gas
+        });
+        
+        console.log("Claim successful:", result);
         showNotification("VNT रिवॉर्ड्स सफलतापूर्वक claim किए गए!", "success");
         await updateUI();
         
     } catch (error) {
         console.error("VNT claim विफल:", error);
+        console.error("Error details:", error.message);
+        console.error("Error code:", error.code);
         
         // Specific error messages handle करें
         if (error.message.includes("minimum") || error.message.includes("Minimum")) {
@@ -381,6 +409,10 @@ async function claimVNTRewards() {
             showNotification("आपका account blacklisted है", "error");
         } else if (error.message.includes("Contract paused")) {
             showNotification("Contract temporarily paused है", "error");
+        } else if (error.message.includes("user rejected")) {
+            showNotification("आपने transaction reject किया", "warning");
+        } else if (error.message.includes("insufficient funds")) {
+            showNotification("Gas fees के लिए पर्याप्त BNB नहीं है", "error");
         } else {
             showNotification(`Claim विफल: ${error.message}`, "error");
         }
