@@ -534,7 +534,7 @@ async function updateUI() {
                 const withdrawInfo = await stakingContract.methods.getMinWithdrawInfo().call();
                 const minVNT = withdrawInfo[0];
                 const rewards = await stakingContract.methods.getPendingRewards(accounts[0]).call();
-                document.getElementById('claimVNTBtn').disabled = rewards[0] < minVNT;
+                
             } catch (error) {
                 console.error("Error updating claim button:", error);
             }
