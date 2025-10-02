@@ -546,6 +546,7 @@ async function updateUI() {
                 console.error("Error updating claim button:", error);
             }
         }
+        }
         
         // 5. रेफरल लिंक अपडेट करें
         if (document.getElementById('referralLink')) {
