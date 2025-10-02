@@ -547,7 +547,8 @@ async function updateUI() {
                     }
                 }
             }
-            
+        }
+        
         // 5. रेफरल लिंक अपडेट करें
         if (document.getElementById('referralLink')) {
             document.getElementById('referralLink').value = 
