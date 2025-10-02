@@ -360,37 +360,30 @@ async function claimVNTRewards() {
     }
     
     try {
-        // Pending rewards प्राप्त करें
-        const rewards = await stakingContract.methods.getPendingRewards(accounts[0]).call();
-        const vntRewardsInWei = rewards.vntRewards; // wei में
-        const vntRewardsInEther = web3.utils.fromWei(vntRewardsInWei, 'ether');
+        // DIRECT contract call करें - किसी calculation के बिना
+        showNotification("VNT रिवॉर्ड्स claim किए जा रहे हैं...", "info");
         
-        console.log("Available rewards:", vntRewardsInEther, "VNT");
-
-        // Minimum limit प्राप्त करें
-        const minInfo = await stakingContract.methods.getMinWithdrawInfo().call();
-        const minVNT = web3.utils.fromWei(minInfo, 'ether');
+        const result = await stakingContract.methods.claimVNTRewards().send({ 
+            from: accounts[0],
+            gas: 300000
+        });
         
-        console.log("Minimum required:", minVNT, "VNT");
-
-        if (parseFloat(vntRewardsInEther) >= parseFloat(minVNT)) {
-            showNotification("VNT रिवॉर्ड्स claim किए जा रहे हैं...", "info");
-            
-            // Claim करें
-            const result = await stakingContract.methods.claimVNTRewards().send({ 
-                from: accounts[0],
-                gas: 300000
-            });
-            
-            showNotification(`${vntRewardsInEther} VNT सफलतापूर्वक claim किए गए`, "success");
-            await updateUI();
-        } else {
-            showNotification(`कम से कम ${minVNT} VNT की आवश्यकता है, आपके पास ${vntRewardsInEther} VNT हैं`, "warning");
-        }
+        showNotification("VNT रिवॉर्ड्स सफलतापूर्वक claim किए गए!", "success");
+        await updateUI();
         
     } catch (error) {
         console.error("VNT claim विफल:", error);
-        showNotification(`VNT claim विफल: ${error.message}`, "error");
+        
+        // Specific error messages handle करें
+        if (error.message.includes("minimum") || error.message.includes("Minimum")) {
+            showNotification("Claim करने के लिए minimum 10 VNT की आवश्यकता है", "warning");
+        } else if (error.message.includes("Blacklisted")) {
+            showNotification("आपका account blacklisted है", "error");
+        } else if (error.message.includes("Contract paused")) {
+            showNotification("Contract temporarily paused है", "error");
+        } else {
+            showNotification(`Claim विफल: ${error.message}`, "error");
+        }
     }
 }
 
