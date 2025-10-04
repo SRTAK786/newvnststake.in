@@ -13,6 +13,9 @@ const walletConnectBtn = document.getElementById('walletConnectBtn');
 const mobileMenuBtn = document.getElementById('mobileMenuBtn');
 const navMenu = document.getElementById('navMenu');
 const claimVNTBtn = document.getElementById('claimVNTBtn');
+const approveMaxBtn = document.getElementById('approveMaxBtn');
+const stakeBtn = document.getElementById('stakeBtn');
+const copyReferralBtn = document.getElementById('copyReferralBtn');
 
 // Global Variables
 let web3;
@@ -21,12 +24,13 @@ let stakingContract;
 let accounts = [];
 let isConnected = false;
 let walletConnectProvider = null;
+let rewardsInterval = null;
 
 // Initialize the application
 window.addEventListener('DOMContentLoaded', async () => {
     console.log("Initializing Web3...");
     console.log("Window.ethereum available:", !!window.ethereum);
-    
+
     // Initialize Web3
     if (window.ethereum) {
         web3 = new Web3(window.ethereum);
@@ -39,20 +43,20 @@ window.addEventListener('DOMContentLoaded', async () => {
                 initContracts();
                 await updateUI();
             }
-            
+
             // Listen for account changes
-            window.ethereum.on('accountsChanged', (newAccounts) => {
+            window.ethereum.on('accountsChanged', async (newAccounts) => {
                 accounts = newAccounts;
                 isConnected = accounts.length > 0;
                 updateWalletButton();
-                if (isConnected) updateUI();
+                if (isConnected) await updateUI();
             });
-            
+
             // Listen for chain changes
             window.ethereum.on('chainChanged', () => {
                 window.location.reload();
             });
-            
+
         } catch (error) {
             console.error("Error connecting to wallet:", error);
         }
@@ -78,7 +82,7 @@ window.addEventListener('DOMContentLoaded', async () => {
           document.getElementById('networkIndicator').textContent = 'Mainnet';
         } catch (error) {
           console.error("Network switch failed:", error);
-          showNotification("Network switch failed: " + error.message, 'error');
+          showNotification("Network switch failed: " + (error?.message || error?.toString()), 'error');
         }
       });
     }
@@ -89,12 +93,6 @@ window.addEventListener('DOMContentLoaded', async () => {
     metamaskBtn.addEventListener('click', connectMetaMask);
     walletConnectBtn.addEventListener('click', connectWalletConnect);
     mobileMenuBtn.addEventListener('click', toggleMobileMenu);
-    
-    const approveMaxBtn = document.getElementById('approveMaxBtn');
-    const stakeBtn = document.getElementById('stakeBtn');
-    const claimVNTBtn = document.getElementById('claimVNTBtn');
-    const copyReferralBtn = document.getElementById('copyReferralBtn');
-    
 
     // Stake page specific event listeners
     if (window.location.pathname.includes('stake.html')) {
@@ -102,7 +100,6 @@ window.addEventListener('DOMContentLoaded', async () => {
         if (stakeBtn) stakeBtn.addEventListener('click', stakeTokens);
         if (claimVNTBtn) claimVNTBtn.addEventListener('click', claimVNTRewards);
         if (copyReferralBtn) copyReferralBtn.addEventListener('click', copyReferralLink);
-        
     }
 
     await loadDailyVNTRewards();
@@ -128,7 +125,7 @@ function showNotification(message, type = 'success') {
     notification.className = `notification ${type}`;
     notification.textContent = message;
     document.body.appendChild(notification);
-    
+
     setTimeout(() => {
         notification.classList.add('fade-out');
         setTimeout(() => notification.remove(), 500);
@@ -138,17 +135,16 @@ function showNotification(message, type = 'success') {
 async function updateHomeStats() {
     try {
         const stats = await stakingContract.methods.getContractStats().call();
-        
-        // Update UI elements if they exist
+
         if (document.getElementById('totalUsers')) {
             document.getElementById('totalUsers').textContent = stats.usersCount;
         }
         if (document.getElementById('totalStakedInContract')) {
-            document.getElementById('totalStakedInContract').textContent = 
+            document.getElementById('totalStakedInContract').textContent =
                 web3.utils.fromWei(stats.totalStaked, 'ether') + ' VNST';
         }
         if (document.getElementById('totalVNTWithdrawn')) {
-            document.getElementById('totalVNTWithdrawn').textContent = 
+            document.getElementById('totalVNTWithdrawn').textContent =
                 web3.utils.fromWei(stats.vntWithdrawn, 'ether') + ' VNT';
         }
     } catch (error) {
@@ -158,14 +154,13 @@ async function updateHomeStats() {
 
 async function updateContractStats() {
   if (!isConnected) return;
-  
+
   try {
     const statsContainer = document.getElementById('contractStats');
     if (!statsContainer) return;
 
-    // Get contract stats
     const stats = await stakingContract.methods.getContractStats().call();
-    
+
     statsContainer.innerHTML = `
       <div class="stat-item">
         <span class="stat-label">Total Users:</span>
@@ -192,17 +187,13 @@ async function updateContractStats() {
 // Wallet functions
 function toggleWalletModal() {
     const modal = document.getElementById('walletModal');
-    if (!walletModal) {
+    if (!modal) {
         console.error('Wallet modal not initialized');
         return;
     }
-    
-    // Toggle modal display
-    const isVisible = walletModal.style.display === 'block';
-    walletModal.style.display = isVisible ? 'none' : 'block';
-    
-    // Disable scroll when modal is open
-    document.body.style.overflow = isVisible ? 'hidden' : '';
+    const isVisible = modal.style.display === 'block';
+    modal.style.display = isVisible ? 'none' : 'block';
+    document.body.style.overflow = isVisible ? '' : 'hidden';
 }
 
 function toggleMobileMenu() {
@@ -213,7 +204,7 @@ async function connectMetaMask() {
     try {
         accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
         console.log("Connected account:", accounts[0]);
-        
+
         isConnected = true;
         updateWalletButton();
         initContracts();
@@ -222,48 +213,34 @@ async function connectMetaMask() {
         toggleWalletModal();
     } catch (error) {
         console.error("Connection failed:", error);
-        alert("Connection failed: " + error.message);
+        alert("Connection failed: " + (error?.message || error?.toString()));
     }
 }
 
-// Wallet Connect को पूरी तरह implement करने का तरीका
 async function connectWalletConnect() {
     try {
         if (typeof WalletConnectProvider === 'undefined') {
             throw new Error("WalletConnect provider not loaded");
         }
-        
-        // Provider को इनिशियलाइज़ करें
+
         const provider = new WalletConnectProvider.default({
             rpc: {
-                56: "https://bsc-dataseed.binance.org/", // BSC Mainnet
+                56: "https://bsc-dataseed.binance.org/",
             },
-            chainId: 56, // Default to BSC Mainnet
+            chainId: 56,
             bridge: "https://bridge.walletconnect.org"
         });
 
-        // 2. Connection स्थापित करें
         await provider.enable();
-        
-        // 3. Web3 instance create करें
         web3 = new Web3(provider);
-        
-        // 4. Accounts प्राप्त करें
         accounts = await web3.eth.getAccounts();
-        
-        // 5. Connection status अपडेट करें
         isConnected = true;
         updateWalletButton();
         initContracts();
         await updateUI();
-        
-        // 6. Modal बंद करें
         toggleWalletModal();
-        
-        // 7. सफलता सूचना दिखाएं
-        showNotification(`WalletConnect से कनेक्ट हुआ: ${accounts[0].substring(0,6)}...${accounts[0].substring(38)}`);
-        
-        // 8. Disconnect event के लिए listener जोड़ें
+        showNotification(`WalletConnect से कनेक्ट हुआ: ${accounts[0].substring(0,6)}...${accounts[0].slice(-4)}`);
+
         provider.on("disconnect", (code, reason) => {
             console.log(`WalletConnect disconnected: ${reason}`);
             handleDisconnect();
@@ -271,13 +248,13 @@ async function connectWalletConnect() {
 
     } catch (error) {
         console.error("WalletConnect connection failed:", error);
-        showNotification(`Connection failed: ${error.message}`, 'error');
+        showNotification(`Connection failed: ${error?.message || error?.toString()}`, 'error');
     }
 }
 
 async function checkNetwork() {
     const chainId = await web3.eth.getChainId();
-    if (chainId !== 56) { // 56 = BSC Mainnet
+    if (chainId !== 56) {
         showNotification("कृपया BSC Mainnet पर स्विच करें", "warning");
         return false;
     }
@@ -289,7 +266,6 @@ function handleDisconnect() {
     accounts = [];
     updateWalletButton();
     showNotification("Wallet disconnected", 'warning');
-    // Additional cleanup
     if (window.walletConnectProvider) {
         window.walletConnectProvider.disconnect();
         window.walletConnectProvider = null;
@@ -298,7 +274,7 @@ function handleDisconnect() {
 
 function updateWalletButton() {
     if (isConnected && accounts[0]) {
-        const shortAddress = `${accounts[0].substring(0, 6)}...${accounts[0].substring(38)}`;
+        const shortAddress = `${accounts[0].substring(0, 6)}...${accounts[0].slice(-4)}`;
         connectWalletBtn.textContent = shortAddress;
         connectWalletBtn.classList.add('connected');
     } else {
@@ -310,7 +286,7 @@ function updateWalletButton() {
 // Staking functions
 async function approveMax() {
     if (!isConnected) return alert("Please connect your wallet first");
-    
+
     try {
         const maxAmount = web3.utils.toWei('10000', 'ether');
         const result = await vnstTokenContract.methods.approve(stakingAddress, maxAmount)
@@ -319,29 +295,28 @@ async function approveMax() {
         alert("Approval successful! You can now stake VNST tokens.");
     } catch (error) {
         console.error("Approval failed:", error);
-        alert("Approval failed: " + error.message);
+        alert("Approval failed: " + (error?.message || error?.toString()));
     }
 }
 
 async function stakeTokens() {
     if (!isConnected) return alert("Please connect your wallet first");
-    
-    const amount = document.getElementById('stakeAmount')?.value;
+
+    const amountStr = document.getElementById('stakeAmount')?.value;
+    const amount = parseFloat(amountStr);
     if (!amount || amount < 100 || amount > 10000) {
         return alert("Please enter a valid amount between 100 and 10,000 VNST");
     }
-    
+
     try {
-        const amountWei = web3.utils.toWei(amount, 'ether');
+        const amountWei = web3.utils.toWei(amountStr, 'ether');
         const referralAddress = document.getElementById('referralAddress')?.value || accounts[0];
-        
-        // Check allowance
+
         const allowance = await vnstTokenContract.methods.allowance(accounts[0], stakingAddress).call();
         if (parseInt(allowance) < parseInt(amountWei)) {
             return alert("Please approve the contract to spend your VNST tokens first");
         }
-        
-        // Execute stake
+
         const result = await stakingContract.methods.stake(amountWei, referralAddress)
             .send({ from: accounts[0] });
         console.log("Staking successful:", result);
@@ -349,41 +324,38 @@ async function stakeTokens() {
         await updateUI();
     } catch (error) {
         console.error("Staking failed:", error);
-        alert("Staking failed: " + error.message);
+        alert("Staking failed: " + (error?.message || error?.toString()));
     }
 }
 
-// केवल VNT रिवॉर्ड्स क्लेम करने के लिए
 async function claimVNTRewards() {
     if (!isConnected) {
         showNotification("कृपया पहले वॉलेट कनेक्ट करें", "error");
         return;
     }
-    
+
     try {
-        // DIRECT contract call करें - किसी calculation के बिना
         showNotification("VNT रिवॉर्ड्स claim किए जा रहे हैं...", "info");
-        
-        const result = await stakingContract.methods.claimVNTRewards().send({ 
+
+        const result = await stakingContract.methods.claimVNTRewards().send({
             from: accounts[0],
             gas: 300000
         });
-        
+
         showNotification("VNT रिवॉर्ड्स सफलतापूर्वक claim किए गए!", "success");
         await updateUI();
-        
+
     } catch (error) {
         console.error("VNT claim विफल:", error);
-        
-        // Specific error messages handle करें
-        if (error.message.includes("minimum") || error.message.includes("Minimum")) {
+        const errorMsg = error?.message || error?.toString();
+        if (errorMsg.includes("minimum") || errorMsg.includes("Minimum")) {
             showNotification("Claim करने के लिए minimum 10 VNT की आवश्यकता है", "warning");
-        } else if (error.message.includes("Blacklisted")) {
+        } else if (errorMsg.includes("Blacklisted")) {
             showNotification("आपका account blacklisted है", "error");
-        } else if (error.message.includes("Contract paused")) {
+        } else if (errorMsg.includes("Contract paused")) {
             showNotification("Contract temporarily paused है", "error");
         } else {
-            showNotification(`Claim विफल: ${error.message}`, "error");
+            showNotification(`Claim विफल: ${errorMsg}`, "error");
         }
     }
 }
@@ -393,29 +365,24 @@ async function loadDailyVNTRewards() {
     const rewardsDisplay = document.getElementById('dailyVntRewardsDisplay');
     if (!rewardsDisplay) return;
 
-    // Raw rewards fetch karein
     const rawRewards = await stakingContract.methods
       .getPendingRewards(accounts[0])
       .call({ from: accounts[0] });
-    
-    // Manual calculation karein
+
     const userStakes = await stakingContract.methods
       .getStakeHistory(accounts[0])
       .call();
-    
-    let correctRewards = web3.utils.toBN(0); // BN object use karein
-    const currentDay = Math.floor(Date.now() / 86400);
-    
+
+    let correctRewards = web3.utils.toBN(0);
+    const currentDay = Math.floor(Date.now() / 1000 / 86400);
+
     for(let i = 0; i < userStakes.amounts.length; i++) {
       if(userStakes.isActive[i]) {
         let stakedDays = currentDay - userStakes.startDays[i];
         const claimedDays = 0;
-        
         if(stakedDays > 365) stakedDays = 365;
-        
         if(stakedDays > claimedDays) {
           const unclaimedDays = stakedDays - claimedDays;
-          // BN arithmetic use karein
           const stakeAmount = web3.utils.toBN(userStakes.amounts[i]);
           const reward = stakeAmount.mul(web3.utils.toBN(2))
                             .mul(web3.utils.toBN(unclaimedDays))
@@ -424,11 +391,10 @@ async function loadDailyVNTRewards() {
         }
       }
     }
-    
-    // BN ko string mein convert karein phir fromWei use karein
+
     const rawRewardsEth = web3.utils.fromWei(rawRewards.toString(), 'ether');
     const correctRewardsEth = web3.utils.fromWei(correctRewards.toString(), 'ether');
-    
+
     rewardsDisplay.innerHTML = `
       <div class="reward-item">
         <span class="reward-label">Contract Value:</span>
@@ -440,7 +406,7 @@ async function loadDailyVNTRewards() {
       </div>
       <small>Note: Showing estimated rewards due to contract bug</small>
     `;
-    
+
   } catch (error) {
     console.error("Error loading rewards:", error);
     const rewardsDisplay = document.getElementById('dailyVntRewardsDisplay');
@@ -448,7 +414,7 @@ async function loadDailyVNTRewards() {
       rewardsDisplay.innerHTML = `
         <div class="error">
           Rewards load nahi ho paye. Kripya baad mein try karein.
-          <br>Error: ${error.message || 'Unknown error'}
+          <br>Error: ${error?.message || error?.toString() || 'Unknown error'}
         </div>
       `;
     }
@@ -457,20 +423,20 @@ async function loadDailyVNTRewards() {
 
 async function showWithdrawHistory() {
   if (!isConnected || !accounts[0]) return;
-  
+
   try {
     const historyContainer = document.getElementById('withdrawHistory');
     if (!historyContainer) return;
 
     const history = await stakingContract.methods.getWithdrawHistory(accounts[0]).call();
-    
+
     if (history.amounts.length === 0) {
       historyContainer.innerHTML = '<p>No withdrawal history found</p>';
       return;
     }
-    
+
     let historyHTML = '<div class="history-header"><span>Amount</span><span>Date</span></div>';
-    
+
     for (let i = 0; i < history.amounts.length; i++) {
       const date = new Date(history.timestamps[i] * 1000);
       historyHTML += `
@@ -480,7 +446,7 @@ async function showWithdrawHistory() {
         </div>
       `;
     }
-    
+
     historyContainer.innerHTML = historyHTML;
   } catch (error) {
     console.error("Error fetching withdraw history:", error);
@@ -496,23 +462,21 @@ async function updateUI() {
 
     try {
         console.log("Updating UI...");
-        
-        // 1. वॉलेट बैलेंस अपडेट करें
+
         if (document.getElementById('walletBalance')) {
             const balance = await vnstTokenContract.methods.balanceOf(accounts[0]).call();
-            document.getElementById('walletBalance').textContent = 
+            document.getElementById('walletBalance').textContent =
                 web3.utils.fromWei(balance, 'ether') + ' VNST';
         }
-        
-        // 2. स्टेक्ड अमाउंट अपडेट करें
+
         if (document.getElementById('yourStaked')) {
             const user = await stakingContract.methods.users(accounts[0]).call();
             const stakedAmount = user.totalStaked || '0';
-            document.getElementById('yourStaked').textContent = 
+            document.getElementById('yourStaked').textContent =
                 web3.utils.fromWei(stakedAmount, 'ether') + ' VNST';
-            
+
             if (document.getElementById('totalClaimedRewards')) {
-                document.getElementById('totalClaimedRewards').textContent = 
+                document.getElementById('totalClaimedRewards').textContent =
                     web3.utils.fromWei(user.totalClaimed || '0', 'ether') + ' VNT';
             }
         }
@@ -520,48 +484,42 @@ async function updateUI() {
         if (window.location.pathname.includes('index.html') || window.location.pathname === '/') {
             await updateHomeStats();
         }
-        
-        // 3. पेंडिंग रिवॉर्ड्स अपडेट करें (नया फंक्शन कॉल)
-        
-        await loadDailyVNTRewards();
-        setInterval(loadDailyVNTRewards, 30000);
-        
-        
 
-        // 4. अन्य UI एलिमेंट्स अपडेट करें
+        await loadDailyVNTRewards();
+        if (!rewardsInterval) {
+            rewardsInterval = setInterval(loadDailyVNTRewards, 30000);
+        }
+
         if (document.getElementById('claimVNTBtn')) {
             try {
-                const withdrawInfo = await stakingContract.methods.getMinWithdrawInfo().call();
-                const minVNT = withdrawInfo[0];
-                const rewards = await stakingContract.methods.getPendingRewards(accounts[0]).call();
-                
-                if (document.getElementById('claimVNTBtn')) {
-                    document.getElementById('claimVNTBtn').disabled = false;
-
-                }
+                const minVNTWei = await stakingContract.methods.getMinWithdrawInfo().call();
+                const minVNT = web3.utils.fromWei(minVNTWei.toString(), 'ether');
+                document.getElementById('claimVNTBtn').innerHTML =
+                    `Claim VNT Rewards (Min: ${minVNT} VNT)`;
+                document.getElementById('claimVNTBtn').disabled = false;
+            } catch (error) {
+                console.error("Error updating claim button:", error);
             }
         }
-        
-        // 5. रेफरल लिंक अपडेट करें
+
         if (document.getElementById('referralLink')) {
-            document.getElementById('referralLink').value = 
+            document.getElementById('referralLink').value =
                 `${window.location.origin}/stake.html?ref=${accounts[0]}`;
-        } 
-        
-        // 6. स्टेक्स लिस्ट अपडेट करें
+        }
+
         if (document.getElementById('stakesList')) {
             try {
                 const stakesCount = await stakingContract.methods.getUserStakesCount(accounts[0]).call();
                 const stakesList = document.getElementById('stakesList');
                 stakesList.innerHTML = '';
-    
+
                 if (stakesCount > 0) {
                     const summaryCard = document.createElement('div');
                     summaryCard.className = 'stake-summary';
-        
+
                     let totalStaked = 0;
                     const activeStakes = [];
-        
+
                     for (let i = 0; i < stakesCount; i++) {
                         const stake = await stakingContract.methods.userStakes(accounts[0], i).call();
                         if (stake.isActive) {
@@ -569,19 +527,19 @@ async function updateUI() {
                             activeStakes.push(stake);
                         }
                     }
-        
+
                     summaryCard.innerHTML = `
                         <p><strong>Total Staked:</strong> ${totalStaked.toFixed(2)} VNST</p>
                         <p><strong>Active Stakes:</strong> ${activeStakes.length}</p>
                         <div class="see-more">Show All Stakes</div>
-                `    ;
-        
+                    `;
+
                     const detailsCard = document.createElement('div');
                     detailsCard.className = 'stake-details';
-        
-                    // सभी एक्टिव स्टेक्स दिखाएं (बिना लिमिट के)
+
                     activeStakes.forEach((stake, index) => {
-                        const stakeDays = Math.min(365, Math.floor((Date.now()/1000 - stake.startDay*86400)/86400));
+                        const currentDay = Math.floor(Date.now() / 1000 / 86400);
+                        const stakeDays = Math.min(365, currentDay - stake.startDay);
                         const startDate = new Date(stake.startDay * 86400 * 1000).toLocaleDateString();
                         const daysRemaining = Math.max(0, 365 - stakeDays);
 
@@ -595,16 +553,16 @@ async function updateUI() {
                                     <div style="width: ${(stakeDays / 365) * 100}%"></div>
                                 </div>
                             </div>
-                    `    ;
+                        `;
                     });
-        
+
                     stakesList.appendChild(summaryCard);
                     stakesList.appendChild(detailsCard);
-        
+
                     const seeMoreBtn = summaryCard.querySelector('.see-more');
                     seeMoreBtn.addEventListener('click', () => {
                         detailsCard.classList.toggle('active');
-                        seeMoreBtn.textContent = detailsCard.classList.contains('active') ? 
+                        seeMoreBtn.textContent = detailsCard.classList.contains('active') ?
                             'Hide Stakes' : 'Show All Stakes';
                     });
                 } else {
@@ -616,7 +574,6 @@ async function updateUI() {
             }
         }
 
-        // 7. अन्य अपडेट्स
         await showWithdrawHistory();
 
         if (window.location.pathname.includes('team.html')) {
@@ -633,10 +590,10 @@ async function updateUI() {
 function copyReferralLink() {
     const referralLinkInput = document.getElementById('referralLink');
     if (!referralLinkInput) return;
-    
-    referralLinkInput.select();
-    document.execCommand('copy');
-    alert("Referral link copied to clipboard!");
+
+    navigator.clipboard.writeText(referralLinkInput.value)
+        .then(() => alert("Referral link copied to clipboard!"))
+        .catch(() => alert("Copy failed!"));
 }
 
 async function updateTeamPage() {
@@ -645,15 +602,13 @@ async function updateTeamPage() {
   try {
     if (!window.location.pathname.includes('team.html')) return;
 
-    // Get only total team data
     const [referralEarnings, rewards] = await Promise.all([
       stakingContract.methods.getReferralEarnings(accounts[0]).call(),
       stakingContract.methods.getPendingRewards(accounts[0]).call()
     ]);
 
-    // Update only basic stats
     document.getElementById('totalTeamMembers').textContent = referralEarnings.referralCount;
-    document.getElementById('totalTeamStake').textContent = 
+    document.getElementById('totalTeamStake').textContent =
       web3.utils.fromWei(referralEarnings.totalTeamDeposits, 'ether') + ' VNST';
 
   } catch (error) {
@@ -663,7 +618,6 @@ async function updateTeamPage() {
 }
 
 async function setupStakingPage() {
-    // Wait for contracts to initialize
     if (!stakingContract) {
         console.log("Waiting for contract initialization...");
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -672,11 +626,11 @@ async function setupStakingPage() {
     const urlParams = new URLSearchParams(window.location.search);
     const ref = urlParams.get('ref');
     const referralAddressInput = document.getElementById('referralAddress');
-    
+
     if (ref && referralAddressInput && !referralAddressInput.value) {
         referralAddressInput.value = ref;
     }
-    
+
     if (isConnected) {
         try {
             await loadDailyVNTRewards();
@@ -688,12 +642,12 @@ async function setupStakingPage() {
 
 async function getStakeDetails(stakeIndex) {
   if (!isConnected || !accounts[0]) return null;
-  
+
   try {
     const stake = await stakingContract.methods.userStakes(accounts[0], stakeIndex).call();
     const currentDay = Math.floor(Date.now() / 1000 / 86400);
     const daysStaked = currentDay - stake.startDay;
-    
+
     return {
       amount: web3.utils.fromWei(stake.amount, 'ether'),
       startDay: stake.startDay,
