@@ -534,17 +534,10 @@ async function updateUI() {
                 const withdrawInfo = await stakingContract.methods.getMinWithdrawInfo().call();
                 const minVNT = withdrawInfo[0];
                 const rewards = await stakingContract.methods.getPendingRewards(accounts[0]).call();
+                
                 if (document.getElementById('claimVNTBtn')) {
                     document.getElementById('claimVNTBtn').disabled = false;
 
-                    try {
-                        const minVNTWei = await stakingContract.methods.getMinWithdrawInfo().call();
-                        const minVNT = web3.utils.fromWei(minVNTWei.toString(), 'ether');
-                        document.getElementById('claimVNTBtn').innerHTML = 
-                            `Claim VNT Rewards (Min: ${minVNT} VNT)`;
-                    } catch (error) {
-                        console.log("Min withdraw info not available");
-                    }
                 }
             }
         }
