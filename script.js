@@ -304,8 +304,8 @@ async function stakeTokens() {
 
     const amountStr = document.getElementById('stakeAmount')?.value;
     const amount = parseFloat(amountStr);
-    if (!amount || amount < 100 || amount > 50000) {
-        return alert("Please enter a valid amount between 100 and 50,000 VNST");
+    if (!amount || amount < 100 || amount > 100000) {
+        return alert("Please enter a valid amount between 100 and 100,000 VNST");
     }
 
     try {
