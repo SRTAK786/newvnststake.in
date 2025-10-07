@@ -288,7 +288,7 @@ async function approveMax() {
     if (!isConnected) return alert("Please connect your wallet first");
 
     try {
-        const maxAmount = web3.utils.toWei('50000', 'ether');
+        const maxAmount = web3.utils.toWei('100000', 'ether');
         const result = await vnstTokenContract.methods.approve(stakingAddress, maxAmount)
             .send({ from: accounts[0] });
         console.log("Approval successful:", result);
