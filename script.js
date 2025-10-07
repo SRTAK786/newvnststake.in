@@ -365,45 +365,42 @@ async function loadDailyVNTRewards() {
     const rewardsDisplay = document.getElementById('dailyVntRewardsDisplay');
     if (!rewardsDisplay) return;
 
-    // Get pending rewards from contract (always correct, use as-is)
+    // Raw rewards fetch karein
     const rawRewards = await stakingContract.methods
       .getPendingRewards(accounts[0])
       .call({ from: accounts[0] });
-
-    // Get all user stakes with lastClaimDay data (for more accurate calculation)
-    // Note: We'll use userStakes from contract: userStakes(address, index)
-    const stakesCount = await stakingContract.methods.getUserStakesCount(accounts[0]).call();
-    let correctRewards = web3.utils.toBN(0);
-    const currentDay = Math.floor(Date.now() / 86400 / 1000);
-
-    for (let i = 0; i < stakesCount; i++) {
-      const stake = await stakingContract.methods.userStakes(accounts[0], i).call();
-      if (stake.isActive) {
-        const stakeAmount = web3.utils.toBN(stake.amount);
-        const startDay = parseInt(stake.startDay);
-        const lastClaimDay = parseInt(stake.lastClaimDay);
-
-        // Calculate days staked so far
-        let daysStaked = Math.floor(Date.now() / 86400 / 1000) - startDay;
-        if (daysStaked > 365) daysStaked = 365;
-
-        // Calculate unclaimed days since last claim (or since start if never claimed)
-        let claimedDays = lastClaimDay > 0 ? lastClaimDay - startDay : 0;
-        let unclaimedDays = daysStaked - claimedDays;
-        if (unclaimedDays < 0) unclaimedDays = 0;
-
-        // Calculate rewards based on contract logic: (amount * 2 * unclaimedDays) / 365
-        const reward = stakeAmount
-          .mul(web3.utils.toBN(2))
-          .mul(web3.utils.toBN(unclaimedDays))
-          .div(web3.utils.toBN(365));
-        correctRewards = correctRewards.add(reward);
+    
+    // Manual calculation karein
+    const userStakes = await stakingContract.methods
+      .getStakeHistory(accounts[0])
+      .call();
+    
+    let correctRewards = web3.utils.toBN(0); // BN object use karein
+    const currentDay = Math.floor(Date.now() / 86400);
+    
+    for(let i = 0; i < userStakes.amounts.length; i++) {
+      if(userStakes.isActive[i]) {
+        let stakedDays = currentDay - userStakes.startDays[i];
+        const claimedDays = 0;
+        
+        if(stakedDays > 365) stakedDays = 365;
+        
+        if(stakedDays > claimedDays) {
+          const unclaimedDays = stakedDays - claimedDays;
+          // BN arithmetic use karein
+          const stakeAmount = web3.utils.toBN(userStakes.amounts[i]);
+          const reward = stakeAmount.mul(web3.utils.toBN(2))
+                            .mul(web3.utils.toBN(unclaimedDays))
+                            .div(web3.utils.toBN(365));
+          correctRewards = correctRewards.add(reward);
+        }
       }
     }
-
+    
+    // BN ko string mein convert karein phir fromWei use karein
     const rawRewardsEth = web3.utils.fromWei(rawRewards.toString(), 'ether');
     const correctRewardsEth = web3.utils.fromWei(correctRewards.toString(), 'ether');
-
+    
     rewardsDisplay.innerHTML = `
       <div class="reward-item">
         <span class="reward-label">Contract Value:</span>
@@ -413,8 +410,9 @@ async function loadDailyVNTRewards() {
         <span class="reward-label">Estimated Actual:</span>
         <span class="reward-value">${parseFloat(correctRewardsEth).toFixed(4)} VNT</span>
       </div>
-      <small>Note: Estimated rewards are now accurate per stake, per claim.</small>
+      <small>Note: Showing estimated rewards due to contract bug</small>
     `;
+    
   } catch (error) {
     console.error("Error loading rewards:", error);
     const rewardsDisplay = document.getElementById('dailyVntRewardsDisplay');
@@ -422,7 +420,7 @@ async function loadDailyVNTRewards() {
       rewardsDisplay.innerHTML = `
         <div class="error">
           Rewards load nahi ho paye. Kripya baad mein try karein.
-          <br>Error: ${error?.message || error?.toString() || 'Unknown error'}
+          <br>Error: ${error.message || 'Unknown error'}
         </div>
       `;
     }
