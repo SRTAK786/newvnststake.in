@@ -288,7 +288,7 @@ async function approveMax() {
     if (!isConnected) return alert("Please connect your wallet first");
 
     try {
-        const maxAmount = web3.utils.toWei('10000', 'ether');
+        const maxAmount = web3.utils.toWei('50000', 'ether');
         const result = await vnstTokenContract.methods.approve(stakingAddress, maxAmount)
             .send({ from: accounts[0] });
         console.log("Approval successful:", result);
@@ -304,8 +304,8 @@ async function stakeTokens() {
 
     const amountStr = document.getElementById('stakeAmount')?.value;
     const amount = parseFloat(amountStr);
-    if (!amount || amount < 100 || amount > 10000) {
-        return alert("Please enter a valid amount between 100 and 10,000 VNST");
+    if (!amount || amount < 100 || amount > 50000) {
+        return alert("Please enter a valid amount between 100 and 50,000 VNST");
     }
 
     try {
@@ -349,7 +349,7 @@ async function claimVNTRewards() {
         console.error("VNT claim विफल:", error);
         const errorMsg = error?.message || error?.toString();
         if (errorMsg.includes("minimum") || errorMsg.includes("Minimum")) {
-            showNotification("Claim करने के लिए minimum 10 VNT की आवश्यकता है", "warning");
+            showNotification("Claim करने के लिए minimum 100 VNT की आवश्यकता है", "warning");
         } else if (errorMsg.includes("Blacklisted")) {
             showNotification("आपका account blacklisted है", "error");
         } else if (errorMsg.includes("Contract paused")) {
